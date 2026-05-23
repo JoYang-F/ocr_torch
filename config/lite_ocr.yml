@@ -1,15 +1,15 @@
 global:
-  infer_det_path: ./output/model_det/dbnet.onnx
-  infer_rec_path: ./output/model_rec/crnn.onnx
+  infer_det_path: ./output/model_det1/latest.onnx
+  infer_rec_path: ./output/model_rec/rec.onnx
   res_save_dir: ./output/result_liteocr
-  image_dir_or_path: /data/projects/task/ocr_torch/data_loader/data_det/test
-  character_json_path: ./data_loader/data_rec/chinese_chars_6695.json
+  image_dir_or_path: ./data_loader/rec/test
+  character_json_path: ./data_loader/rec/num_chars_38.json
 
 det:
   post_process:
     name: DBPostProcess
     thresh: 0.3
-    box_thresh: 0.7
+    box_thresh: 0.6
     max_candidates: 1000
     unclip_ratio: 1.6
   transforms:
