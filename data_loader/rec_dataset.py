@@ -1,6 +1,6 @@
 import os
 import cv2
-import codecs
+import json
 import random
 import numpy as np
 from torch.utils.data import Dataset
@@ -17,6 +17,7 @@ class RecDataSet(Dataset):
         self.logger = logger
         cj = CharacterJson(global_config["character_json_path"])
         self.char2idx = cj.char2idx
+        self.pad_idx = self.char2idx.get("<BLANK>", 0)
         self.max_text_len = global_config["max_text_len"]
         self.data_lines = self.get_image_info_list(dataset_config["ano_file_path"])
         self.transforms = self._transforms_func_lst(dataset_config["transforms"])
@@ -37,19 +38,30 @@ class RecDataSet(Dataset):
         return func_lst
 
     def get_image_info_list(self, file_path):
-        """数据文件以\t分割"""
+        """支持 txt 和 json 格式的标签文件"""
         lines = []
-        with codecs.open(file_path, "r", "utf8") as f:
-            for line in f.readlines():
-                tmp_data = line.strip().split("\t")
-                if len(tmp_data) != 2:
-                    self.logger.warn(f"{line}数据格式不对")
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".json":
+            with open(file_path, "r", encoding="utf8") as f:
+                labels = json.load(f)
+            for img_name, text in labels.items():
+                img_path = os.path.join(self.base_dir, img_name)
+                if not os.path.exists(img_path):
+                    self.logger.warn(f"{img_path}图片文件不存在")
                     continue
-                image_path = os.path.join(self.base_dir, tmp_data[0])
-                if not os.path.exists(image_path):
-                    self.logger.warn(f"{image_path}图片文件不存在")
-                    continue
-                lines.append([tmp_data[0], tmp_data[1]])
+                lines.append([img_name, text])
+        else:
+            with open(file_path, "r", encoding="utf8") as f:
+                for line in f.readlines():
+                    tmp_data = line.strip().split("\t")
+                    if len(tmp_data) != 2:
+                        self.logger.warn(f"{line}数据格式不对")
+                        continue
+                    image_path = os.path.join(self.base_dir, tmp_data[0])
+                    if not os.path.exists(image_path):
+                        self.logger.warn(f"{image_path}图片文件不存在")
+                        continue
+                    lines.append([tmp_data[0], tmp_data[1]])
         return lines
 
     def rec_label_encoder(self, label_str):
@@ -61,8 +73,8 @@ class RecDataSet(Dataset):
         if len(labels) > self.max_text_len:
             return
         sequence_length = len(labels)
-        labels = labels + [self.char2idx["<PAD>"]] * (self.max_text_len - len(labels))
-        labels = np.array(labels, dtype=np.int)
+        labels = labels + [self.pad_idx] * (self.max_text_len - len(labels))
+        labels = np.array(labels, dtype=int)
         return labels, sequence_length
 
     def __getitem__(self, index):

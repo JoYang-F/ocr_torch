@@ -1,7 +1,6 @@
 import os
 import cv2
 import json
-import codecs
 import random
 import numpy as np
 from torch.utils.data import Dataset
@@ -23,19 +22,35 @@ class DetDataSet(Dataset):
         return len(self.data_lines)
 
     def get_image_info_list(self, file_path):
-        """数据文件以\t分割"""
+        """支持 txt 和 json 格式的标签文件"""
         lines = []
-        with codecs.open(file_path, "r", "utf8") as f:
-            for line in f.readlines():
-                tmp_data = line.strip().split("\t")
-                if len(tmp_data) != 2:
-                    self.logger.warn(f"{line}数据格式不对")
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".json":
+            with open(file_path, "r", encoding="utf8") as f:
+                labels = json.load(f)
+            for img_name, annotations in labels.items():
+                img_path = None
+                for img_ext in [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]:
+                    candidate = os.path.join(self.base_dir, img_name + img_ext)
+                    if os.path.exists(candidate):
+                        img_path = candidate
+                        break
+                if img_path is None:
+                    self.logger.warn(f"{img_name}图片文件不存在")
                     continue
-                image_path = os.path.join(self.base_dir, tmp_data[0])
-                if not os.path.exists(image_path):
-                    self.logger.warn(f"{image_path}图片文件不存在")
-                    continue
-                lines.append([tmp_data[0], tmp_data[1]])
+                lines.append([img_name + img_ext, json.dumps(annotations, ensure_ascii=False)])
+        else:
+            with open(file_path, "r", encoding="utf8") as f:
+                for line in f.readlines():
+                    tmp_data = line.strip().split("\t")
+                    if len(tmp_data) != 2:
+                        self.logger.warn(f"{line}数据格式不对")
+                        continue
+                    image_path = os.path.join(self.base_dir, tmp_data[0])
+                    if not os.path.exists(image_path):
+                        self.logger.warn(f"{image_path}图片文件不存在")
+                        continue
+                    lines.append([tmp_data[0], tmp_data[1]])
         return lines
 
     @staticmethod
@@ -46,7 +61,7 @@ class DetDataSet(Dataset):
         for bno in range(0, len(label)):
             box = label[bno]["points"]
             txt = label[bno]["transcription"]
-            if txt in ["*", "###"]:  # ICDAR为###
+            if txt in ["*", "###"] or label[bno].get("illegibility", False):
                 ignore_tags.append(True)
             else:
                 ignore_tags.append(False)
