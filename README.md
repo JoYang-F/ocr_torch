@@ -1,61 +1,72 @@
 # ocr_torch
 
-基于 PyTorch 实现的轻量级文字检测识别项目，支持 **DBNet + CRNN** 端到端推理和 ONNX 导出。
+基于 PyTorch 的轻量级 OCR 检测识别项目，支持 **DBNet + CRNN** 端到端推理及 ONNX 导出。
 
-- 文本检测：DBNet（支持 ResNet34 / MobileNetV3 骨干网络）
-- 文本识别：CRNN（支持 MobileNetV3 / ResNet 骨干网络 + SequenceEncoder + CTCHead）
+- **文本检测** — DBNet（支持 ResNet18/34 及 MobileNetV3 骨干）
+- **文本识别** — CRNN（支持 MobileNetV3 / ResNet18/34 骨干 + SequenceEncoder + CTCHead）
 
 ---
 
 ## 环境依赖
 
-- Python 3.7+
-- PyTorch 1.8+
+- Python 3.8
+- PyTorch 1.8.1
 - onnxruntime（ONNX 推理）
 
 ## 项目结构
 
 ```text
 ocr_torch/
-├── config/                    # 配置文件
-│   ├── train/                 # 训练配置（det.yml, rec.yml）
-│   ├── predict/               # 预测配置（det.yml, rec.yml）
-│   ├── lite_ocr.yml           # 端到端推理配置
-│   └── load_conf.py           # 配置加载器
-├── data_loader/               # 数据加载
-│   ├── det/                   # 检测数据集（train/val/test + 标签）
-│   ├── rec/                   # 识别数据集（train/val/test + 标签 + 字符映射）
-│   ├── det_dataset.py         # DBNet 数据集（支持 txt/json 标签）
-│   ├── rec_dataset.py         # CRNN 数据集（支持 txt/json 标签）
-│   └── img_aug.py             # 图像增强
-├── nets/                      # 网络模块
-│   ├── det/                   # 检测网络
-│   │   ├── dbnet.py           # DBNet 模型
-│   │   ├── db_fpn.py          # 特征金字塔网络（FPN）
-│   │   ├── db_head.py         # DB Head
-│   │   └── mobilenetv3.py     # MobileNetV3 检测骨干
-│   ├── rec/                   # 识别网络
-│   │   ├── rnn.py             # CRNN 模型
-│   │   ├── mobilenet_v3.py    # MobileNetV3 识别骨干
-│   │   ├── resnet.py          # ResNet 识别骨干
-│   │   ├── sequence_encoder.py # 序列编码器
-│   │   └── ctc_head.py        # CTC 预测头
-│   └── __init__.py            # 模型构建入口
-├── losses/                    # 损失函数
-│   ├── det_loss.py            # DBNet 损失（L1BalanceCELoss）
-│   └── ctc_loss.py            # CTC Loss
-├── metrics/                   # 评估指标
-│   ├── det_metric.py          # 检测指标
-│   └── rec_metric.py          # 识别指标（acc, norm_edit_dis）
-├── postprocess/               # 后处理
-│   ├── det_postprocess.py     # DB 后处理
-│   └── rec_postprocess.py     # CRNN 后处理
-├── optimizer/                 # 优化器（Adam + Cosine Warmup）
-├── logger/                    # 日志
-├── utils/                     # 工具函数
-├── train.py                   # 训练入口
-├── predict.py                 # 预测入口（支持 PyTorch / ONNX）
-└── lite_ocr.py                # 端到端检测+识别推理
+├── config/                          # 配置文件
+│   ├── train/                       # 训练配置（det.yml, rec.yml）
+│   ├── predict/                     # 推理配置（det.yml, rec.yml）
+│   ├── lite_ocr.yml                 # 端到端推理配置
+│   └── load_conf.py                 # 配置加载器
+├── data_loader/                     # 数据加载
+│   ├── det/                         # 检测数据集（图像 + 标签）
+│   ├── rec/                         # 识别数据集（图像 + 标签 + 字符映射）
+│   ├── det_dataset.py               # 检测数据集（支持 txt / json）
+│   ├── rec_dataset.py               # 识别数据集（支持 txt / json）
+│   └── img_aug/                     # 图像增强
+│       ├── operators.py             # 基础算子（归一化、缩放等）
+│       ├── random_crop_data.py      # 随机裁剪
+│       ├── make_binary_map.py       # 二值图生成
+│       ├── make_threshold_map.py    # 阈值图生成
+│       ├── rec_img_aug.py           # 识别数据增强
+│       └── text_image_aug/          # 文本图像仿射变换
+├── nets/                            # 网络模型
+│   ├── det/                         # 检测网络
+│   │   ├── dbnet.py                 # DBNet
+│   │   ├── db_fpn.py                # 特征金字塔（FPN）
+│   │   ├── db_head.py               # DB Head
+│   │   ├── mobilenetv3.py           # MobileNetV3 骨干
+│   │   ├── resnet.py                # ResNet 骨干
+│   │   └── params_mapping.py        # 预训练参数映射
+│   └── rec/                         # 识别网络
+│       ├── rnn.py                   # CRNN
+│       ├── mobilenet_v3.py          # MobileNetV3 骨干
+│       ├── resnet.py                # ResNet 骨干
+│       ├── sequence_encoder.py      # 序列编码器
+│       └── ctc_head.py              # CTC 预测头
+├── losses/                          # 损失函数
+│   ├── loss.py                      # 基础损失（DiceLoss、L1Loss、BCELoss）
+│   ├── det_loss.py                  # DBNet 损失（L1BalanceCELoss）
+│   └── ctc_loss.py                  # CTC Loss
+├── metrics/                         # 评估指标
+│   ├── det_metric.py                # 检测评估
+│   ├── eval_det_iou.py              # IoU 计算
+│   └── rec_metric.py                # 识别评估（acc, norm_edit_dis）
+├── postprocess/                     # 后处理
+│   ├── det_postprocess.py           # DB 后处理
+│   └── rec_postprocess.py           # CRNN 后处理
+├── optimizer/                       # 优化器
+│   ├── optim.py                     # Adam 优化器
+│   └── learning_rate.py             # 学习率调度（Cosine Warmup）
+├── logger/                          # 日志
+├── utils/                           # 工具函数
+├── train.py                         # 训练入口
+├── predict.py                       # 预测入口（PyTorch / ONNX）
+└── lite_ocr.py                      # 端到端检测 + 识别推理
 ```
 
 ## 使用说明
@@ -66,7 +77,7 @@ ocr_torch/
 python train.py -c config/train/det.yml
 ```
 
-骨干网络可选：`resnet34`（默认）、`det_mobilenet_v3`
+骨干网络可选：`resnet34`（默认）、`resnet18`、`det_mobilenet_v3`
 
 ### 2. 文本识别模型训练（CRNN）
 
@@ -82,7 +93,7 @@ python train.py -c config/train/rec.yml
 python predict.py -c config/predict/det.yml
 ```
 
-支持 PyTorch 模型和 ONNX 两种推理方式（通过 `use_infer_model` 配置切换）。
+支持 PyTorch 模型直接推理或导出 ONNX 后推理（通过 `use_infer_model` 切换）。
 
 ### 4. 文本识别推理
 
@@ -90,39 +101,44 @@ python predict.py -c config/predict/det.yml
 python predict.py -c config/predict/rec.yml
 ```
 
-### 5. 端到端检测+识别推理
+### 5. 端到端检测 + 识别
 
 ```bash
 python lite_ocr.py -c config/lite_ocr.yml
 ```
 
-先检测文本位置，再逐个裁剪识别，结果保存为图片可视化 + result.txt。
+依次执行文本检测 → 仿射变换裁剪 → 文本识别，结果保存为可视化图像 + result.txt。
 
 ### ONNX 导出
 
-预测时设置 `use_infer_model: true` 会自动将 PyTorch 模型导出为 ONNX 并推理。
+预测时设置 `use_infer_model: true`，自动导出 ONNX 并加载推理。
 
-## 配置文件说明
+## 配置说明
 
-训练配置采用 `Architecture` 格式组织：
+训练配置采用 `Architecture` 分层结构：
 
 ```yaml
 Architecture:
-  model_type: det           # det / rec
-  algorithm: DBNet          # DBNet / CRNN
+  model_type: det                  # det / rec
+  algorithm: DBNet                 # DBNet / CRNN
   Backbone:
-    name: resnet34          # 骨干网络名称
+    name: resnet34                 # 骨干网络
+    pre_trained_dir:               # 预训练权重路径
   Neck:
-    name: DBFPN             # FPN 颈部网络
+    name: DBFPN                    # 颈部网络
     inner_channel: 96
   Head:
-    name: DBHead            # 检测头
+    name: DBHead                   # 检测头
     k: 50
 ```
 
-## 主要参考文献
+## 参考文献
 
 1. [DBNet: Real-time Scene Text Detection with Differentiable Binarization](https://arxiv.org/pdf/1911.08947.pdf)
 2. [CRNN: An End-to-End Trainable Neural Network for Image-based Sequence Recognition](https://arxiv.org/abs/1507.05717)
 3. [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
 4. [DBNet.pytorch](https://github.com/WenmuZhou/DBNet.pytorch)
+
+## 开源协议
+
+本项目基于 Apache 2.0 协议开源。
