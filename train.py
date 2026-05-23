@@ -1,4 +1,7 @@
 import os
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
 import json
 import time
 import torch
@@ -14,8 +17,6 @@ from config.load_conf import ReadConfig
 from postprocess import build_post_process
 from data_loader import build_data_loader
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'
-
 
 def main(conf, logger):
     distributed = False
@@ -24,7 +25,18 @@ def main(conf, logger):
     else:
         device = torch.device("cuda:0")
 
-    model = build_model(conf["model_det"])
+    model_conf = conf.get("Architecture", conf.get("model"))
+    # model = build_model(conf["model"])
+    # 仅当任务类型为 REC（识别）时才从字符集 JSON 读取 classes_num
+    if conf["global"]["yml_type"] == "REC":
+        char_json_path = conf["global"]["character_json_path"]
+        with open(char_json_path, 'r', encoding='utf-8') as f:
+            char_list = json.load(f)
+        classes_num = len(char_list) 
+        model_conf["classes_num"] = classes_num
+        logger.info(f"字符识别种类：classes_num = {classes_num}")
+
+    model = build_model(model_conf)
     model = model.to(device)
 
     trainer = Trainer(
@@ -35,7 +47,7 @@ def main(conf, logger):
         distributed=distributed
     )
 
-    logger.info("模型初始化完成....")
+    logger.info("模型初始化完成.....")
     time.sleep(2)
     trainer.train()
 
@@ -104,7 +116,7 @@ class Trainer(object):
 
     def train(self):
         self._model.train()
-        self._logger.info("开始训练....")
+        self._logger.info(f"开始训练{self._global_conf['yml_type']}模型.....")
         time.sleep(1)
         for epoch in range(self._start_epoch, self._global_conf["epochs"] + 1):
             log_start_time = time.time()
@@ -150,7 +162,7 @@ class Trainer(object):
                     "cur metrics: {}".format(", ".join(["{}:{}".format(k, v) for k, v in cur_metrics.items()])))
                 if cur_metrics[self._conf["metrics"]["main_indicator"]] > self._best_indicator:
                     self._best_epoch = epoch
-                    self._best_indicator = cur_metrics[self._indicator_name]
+                    self._best_indicator = cur_metrics[self._conf["metrics"]["main_indicator"]]
                     self._save_pth_model(self._indicator_name, epoch, self._best_epoch, self._best_indicator)
 
             if epoch % self._global_conf["save_epoch_iter"] == 0:

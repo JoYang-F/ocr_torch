@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from .sequence_encoder import SequenceEncoder
+from .ctc_head import CTCHead
 
 
 class CRNN(nn.Module):
@@ -16,43 +17,22 @@ class CRNN(nn.Module):
         super(CRNN, self).__init__()
 
         self.backbone = self._call_backbone(backbone)
-        self.rnn_in_channel = self.backbone.output_channel
-        self.classes_num = classes_num
-        self.bidirectional = bidirectional
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.rnn_type = rnn_type
-        assert self.rnn_type in ["LSTM", "GRU"]
+        rnn_in_channel = self.backbone.output_channel
 
-        if self.rnn_type == "LSTM":
-            self.rnn_layer = nn.GRU(
-                input_size=self.rnn_in_channel,
-                hidden_size=self.hidden_size,
-                num_layers=self.num_layers,
-                batch_first=False,
-                bidirectional=bidirectional
-            )
-        else:
-            self.rnn_layer = nn.LSTM(
-                input_size=self.rnn_in_channel,
-                hidden_size=self.hidden_size,
-                num_layers=self.num_layers,
-                batch_first=False,
-                bidirectional=self.bidirectional
-            )
-        for name, params in self.rnn_layer.named_parameters():
-            nn.init.uniform_(params, -0.1, 0.1)
-
-        rnn_out_channel = hidden_size
-        if self.bidirectional:
-            rnn_out_channel = hidden_size * 2
-
-        self.fc = nn.Linear(
-            in_features=rnn_out_channel,
-            out_features=self.classes_num,
-            bias=True
+        self.encoder = SequenceEncoder(
+            input_size=rnn_in_channel,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            bidirectional=bidirectional,
+            rnn_type=rnn_type,
         )
-        self.apply(self._weights_init)
+
+        rnn_out_channel = hidden_size * 2 if bidirectional else hidden_size
+
+        self.head = CTCHead(
+            in_features=rnn_out_channel,
+            out_features=classes_num,
+        )
 
     @staticmethod
     def _call_backbone(backbone):
@@ -60,15 +40,12 @@ class CRNN(nn.Module):
         if module_func == "rec_mobilenet_v3":
             from nets.rec.mobilenet_v3 import rec_mobilenet_v3
             module_func = eval(module_func)(**backbone)
+        elif module_func in ["rec_resnet18","rec_resnet34", "rec_resnet50"]:
+            from nets.rec.resnet import rec_resnet18, rec_resnet34, rec_resnet50
+            module_func = eval(module_func)(**backbone)
         else:
             raise Exception("backbone {} is not found".format(module_func))
         return module_func
-
-    @staticmethod
-    def _weights_init(m):
-        if isinstance(m, nn.Linear):
-            m.weight.data.normal_(0, 0.01)
-            m.bias.data.zero_()
 
     def forward(self, x):
         """
@@ -77,11 +54,9 @@ class CRNN(nn.Module):
         """
         x = self.backbone(x)  # N * C * 1 * W (mobilenet: N * 288 * 1 * 25)
         x = x.squeeze(axis=2)  # N * C * W
-        x = x.permute(2, 0, 1)  # N * W * C
-        x, _ = self.rnn_layer(x)
-        x = self.fc(x)
-        if not self.training:
-            x = F.softmax(x, dim=2)
+        x = x.permute(2, 0, 1)  # W * N * C
+        x = self.encoder(x)
+        x = self.head(x)
         return x
 
 

@@ -12,10 +12,10 @@ def logging_conf(log_path, level="INFO"):
                 "propagate": False,
                 "handlers": ["mail"]
             },
-            "data_det": {
+            "logs": {
                 "level": level,
                 "propagate": False,
-                "handlers": ["data_det", "console"]
+                "handlers": ["logs", "console"]
             },
             "console": {
                 "level": level,
@@ -25,7 +25,7 @@ def logging_conf(log_path, level="INFO"):
         },
         "disable_existing_loggers": False,
         "handlers": {
-            "data_det": {
+            "logs": {
                 "formatter": "simple",
                 "backupCount": 10,
                 "class": "logging.handlers.RotatingFileHandler",
@@ -51,7 +51,7 @@ def logging_conf(log_path, level="INFO"):
         "formatters": {
             "default": {
                 "datefmt": "%Y-%m-%d %H:%M:%S",
-                "format": "%(asctime)s - %(levelname)s - %(module)s.%(name)s : %(message)s"
+                "format": "%(asctime)s - %(levelname)s - %(module)s.%(name)s : \n%(message)s"
             },
             "simple": {
                 "format": "%(asctime)s - %(levelname)s - %(message)s"

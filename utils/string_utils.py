@@ -1,5 +1,4 @@
 import json
-import codecs
 
 
 class CharacterJson(object):
@@ -7,7 +6,7 @@ class CharacterJson(object):
         self._read_character_dict(character_json_path)
 
     def _read_character_dict(self, character_json_path):
-        with codecs.open(character_json_path, "r", "utf8") as f:
+        with open(character_json_path, "r", encoding="utf8") as f:
             char2idx = json.loads(f.read())
 
         self.char2idx = char2idx

@@ -97,6 +97,10 @@ class LiteOcr(object):
             if image is None:
                 print("reading image_path: {} failed".format(image_path))
                 continue
+                
+            # ✅ 新增：复制一份图像用于画框可视化
+            draw_img = image.copy()
+            
             data = {"image": image}
             for _transform in self._det_transforms:
                 data = _transform(data)
@@ -111,7 +115,7 @@ class LiteOcr(object):
             print("image: {} \texpend time: {:.4f}".format(image_path, time.time() - start_time))
             boxes_batch, scores_batch = self._det_post_process(preds, data)
 
-            results = []
+            # ✅ 修复：移除了多余的局部变量 results = []
             for idx, (box, score) in enumerate(zip(boxes_batch[0], scores_batch)):
                 tmp_box = copy.deepcopy(box)
                 tmp_img = self._get_rotate_crop_image(image, tmp_box.astype(np.float32))
@@ -120,19 +124,40 @@ class LiteOcr(object):
                 line_img = RecResizeImg(image_shape=[3, 32, w])({"image": tmp_img})["image"]
                 preds = self.rec_sess.run(["output"], {"input": np.expand_dims(line_img, axis=0)})[0]
                 line_text, line_score = self._rec_post_process(preds)[0]
+                
                 tmp = dict()
                 tmp["file_name"] = image_path
                 if line_text.strip() != '':
-                    tmp["text"] = line_text.replace(" ", "").replace("　", "")
+                    tmp["text"] = line_text.replace(" ", "").replace(" ", "")
                     bbox = tmp_box.tolist()
-                    tmp["score"] = round(float(score*line_score), 3)
+                    
+                    # ✅ 修复：将可能为数组的置信度安全降维（求均值），防止 float 转换报错
+                    safe_score = float(np.mean(score))
+                    safe_line_score = float(np.mean(line_score))
+                    tmp["score"] = round(safe_score * safe_line_score, 3)
+                    
                     tmp["bbox"] = [
                         bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1],
                         bbox[2][0], bbox[2][1], bbox[3][0], bbox[3][1]
                     ]
-                    results.append(tmp)
+                    # ✅ 修复：将识别结果追加到最外层的 result 列表，确保最后写入 txt 不为空
+                    result.append(tmp)
+                    
+                    # ✅ 新增：在复制的图像上画出红色的检测框
+                    pts = np.array(tmp_box, np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(draw_img, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
+                    
+                    # ✅ 新增：在框的左上角标注绿色数字序号（与 txt 文件结果一一对应）
+                    cv2.putText(draw_img, str(idx), (int(tmp_box[0][0]), int(tmp_box[0][1]) - 5), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        with codecs.open(os.path.join(self._global_param["res_save_dir"], "result.txt"), "a", "utf8") as f:
+            # ✅ 新增：完成一张图片的识别后，保存画好框的可视化图像
+            img_name = os.path.basename(image_path)
+            vis_save_path = os.path.join(self._global_param["res_save_dir"], img_name)
+            cv2.imwrite(vis_save_path, draw_img)
+
+        # ✅ 修复：使用内置 open 时明确指定 encoding="utf8"，解决 Integer required 报错
+        with open(os.path.join(self._global_param["res_save_dir"], "result.txt"), "a", encoding="utf8") as f:
             for res in result:
                 f.write(json.dumps(res, ensure_ascii=False)+"\n")
 

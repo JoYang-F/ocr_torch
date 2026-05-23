@@ -5,7 +5,6 @@ import json
 import argparse
 import time
 import copy
-import codecs
 from functools import partial
 import numpy as np
 import onnx
@@ -17,7 +16,8 @@ from data_loader.img_aug import *
 
 
 def main(params):
-    model = build_model(params["model"])
+    model_conf = params.get("Architecture", params.get("model"))
+    model = build_model(model_conf)
     post_process = build_post_process(params["post_process"])
     pt = Predictor(model, post_process, params)
     pt.predict()
@@ -155,15 +155,18 @@ class Predictor(object):
                 self._draw_det_res(image, dt_boxes_json, os.path.basename(image_path))
             else:
                 dt_boxes_json["text"] = post_result[0][0]
-                dt_boxes_json["score"] = post_result[0][1]
+                dt_boxes_json["score"] = float(post_result[0][1])
+                img_name = os.path.basename(image_path)
+                print(f" >>> 识别结果: {dt_boxes_json['text']}  置信度: {dt_boxes_json['score']:.4f}\n")
+            
             result.append(dt_boxes_json)
 
-        with codecs.open(os.path.join(self._conf["res_save_dir"], "result.txt"), "a", "utf8") as f:
+        with open(os.path.join(self._conf["res_save_dir"], "result.txt"), "a", encoding="utf8") as f:
             for res in result:
                 f.write(json.dumps(res, ensure_ascii=False)+"\n")
 
     def _draw_det_res(self, image, dt_boxes_json, img_name):
-        cus_line = partial(cv2.line, color=(255, 255, 0), thickness=1)
+        cus_line = partial(cv2.line, color=(255, 255, 0), thickness=3)
         if len(dt_boxes_json) > 0:
             new_im = copy.copy(image)
             for i, box in enumerate(dt_boxes_json["bbox"]):

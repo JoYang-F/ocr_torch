@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -143,7 +144,7 @@ class MobileNetV3(nn.Module):
             nn.BatchNorm2d(cls_ch_squeeze),
             nn.Hardswish(inplace=True)
         )
-        self.pool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.pool = nn.MaxPool2d(kernel_size=(2, 1), stride=(2, 1))
 
         self.apply(_weights_init)
 
@@ -182,8 +183,13 @@ class MobileNetV3(nn.Module):
 
 
 def rec_mobilenet_v3(pre_trained_dir=None, multiplier=0.5, use_se=False):
-    if not pre_trained_dir:
-        return MobileNetV3(multiplier, use_se)
+    model = MobileNetV3(multiplier, use_se)
+    if pre_trained_dir and os.path.exists(pre_trained_dir):
+        state_dict = torch.load(pre_trained_dir, map_location="cpu")
+        # strict=False 允许只加载匹配的层（例如只加载 backbone 匹配的部分权重）
+        model.load_state_dict(state_dict, strict=False)
+        print(f"Loaded pretrained weights from {pre_trained_dir}")
+    return model
 
 
 if __name__ == "__main__":

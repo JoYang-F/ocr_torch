@@ -7,7 +7,8 @@ class CTCLoss(nn.Module):
         super(CTCLoss, self).__init__()
         self.ctc_loss = nn.CTCLoss(
             blank=0,
-            reduction="mean"
+            reduction="mean",
+            zero_infinity=True
         )
 
     def forward(self, x, batch):

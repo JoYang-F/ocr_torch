@@ -13,7 +13,7 @@ class OptimizerScheduler(object):
         return optim.Adam(
             params=self._parameters,
             lr=self._learning_rate,
-            weight_decay=0,
+            weight_decay=1e-5,
             amsgrad=True
         )
 
