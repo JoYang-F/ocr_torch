@@ -1,4 +1,6 @@
 .pretrained_models/
+.vscode/
+pretrained/
 .idea/
 *.log
 __pycache__/
