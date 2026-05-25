@@ -1,9 +1,14 @@
 global:
-  infer_det_path: ./output/model_det1/latest.onnx
-  infer_rec_path: ./output/model_rec/rec.onnx
+  infer_det_path: ./output/model_det/DBNet.onnx
+  infer_rec_path: ./output/model_rec/CRNN.onnx
   res_save_dir: ./output/result_liteocr
-  image_dir_or_path: ./data_loader/rec/test
+  image_dir_or_path: ./data_loader/det/test
   character_json_path: ./data_loader/rec/num_chars_38.json
+
+  use_gpu: true              
+  cpu_threads: 8             
+  enable_mkldnn: true        
+  rec_batch_size: 6 
 
 det:
   post_process:
@@ -14,11 +19,17 @@ det:
     unclip_ratio: 1.6
   transforms:
     - ResizeForTest:
-      long_size: 960
-    - NormalizeImage:
+        long_size: 960
+    - NormalizeImage:        
     - OutputData:
         keep_keys: ["image", "src_scale"]
 
 rec:
   post_process:
     name: CRnnPostProcess
+  transforms:
+    - RecResizeImg:
+        image_shape: [3, 32, 320]  
+    - NormalizeImage:              
+    - OutputData:
+        keep_keys: ["image"]
