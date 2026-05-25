@@ -5,3 +5,4 @@ pretrained/
 *.log
 __pycache__/
 output/
+data_loader/
