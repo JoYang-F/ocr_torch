@@ -1,6 +1,6 @@
 global:
   yml_type: DET
-  use_gpu: true
+  use_gpu: false
   epochs: 200
   eval_epoch: 10
   save_pth_dir: ./output/model_det/
@@ -16,12 +16,12 @@ Architecture:
   model_type: det
   algorithm: DBNet
   Backbone:
-    # name: det_mobilenet_v3
-    # pre_trained_dir:
-    # multiplier: 0.5
-    # use_se: false
-    name: resnet34
+    name: det_mobilenet_v3
     pre_trained_dir:
+    multiplier: 0.5
+    use_se: false
+    # name: resnet34
+    # pre_trained_dir:
   Neck:
     name: DBFPN
     inner_channel: 96
@@ -83,7 +83,7 @@ train:
       - OutputData:
           keep_keys: ['image', 'thresh_map', 'thresh_mask', 'prob_map', 'prob_mask']
   dataloader:
-    batch_size: 8
+    batch_size: 2
     num_workers: 0
     drop_last: true
     pin_memory: true

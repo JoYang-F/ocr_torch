@@ -1,6 +1,6 @@
 global:
   yml_type: REC
-  use_gpu: true
+  use_gpu: false
   epochs: 200
   eval_epoch: 10
   save_pth_dir: ./output/model_rec/
@@ -68,7 +68,7 @@ train:
       - OutputData:
           keep_keys: ['image', 'sequence_length', 'label_idx']
   dataloader:
-    batch_size: 16
+    batch_size: 2
     num_workers: 0
     drop_last: true
     pin_memory: true
