@@ -13,12 +13,12 @@ Architecture:
   model_type: det
   algorithm: DBNet
   Backbone:
-    # name: det_mobilenet_v3
-    # pre_trained_dir:
-    # multiplier: 0.5
-    # use_se: false
-    name: resnet34
+    name: det_mobilenet_v3
     pre_trained_dir:
+    multiplier: 0.5
+    use_se: false
+    # name: resnet34
+    # pre_trained_dir:
   Neck:
     name: DBFPN
     inner_channel: 96

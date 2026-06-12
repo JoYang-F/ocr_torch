@@ -17,6 +17,8 @@ Architecture:
     pre_trained_dir:
     multiplier: 0.5
     use_se: false
+    # name: rec_resnet18
+    # pre_trained_dir:
   Neck:
     name: SequenceEncoder
     encoder_type: rnn

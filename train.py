@@ -71,6 +71,7 @@ class Trainer(object):
         self._distributed = distributed
         self._global_conf = self._conf["global"]
         self._best_indicator = 0
+        self._best_metrics = {}
         self._indicator_name = "best_{}".format(self._conf["metrics"]["main_indicator"])
         if torch.cuda.is_available() and torch.cuda.device_count() > 1:
             # rank 标记主机或从机，设置为0表示主机
@@ -164,7 +165,10 @@ class Trainer(object):
                     if cur_metrics[self._conf["metrics"]["main_indicator"]] > self._best_indicator:
                         self._best_epoch = epoch
                         self._best_indicator = cur_metrics[self._conf["metrics"]["main_indicator"]]
+                        self._best_metrics = cur_metrics
                         self._save_pth_model(self._indicator_name, epoch, self._best_epoch, self._best_indicator)
+                    self._logger.info("best metrics: {}".format(
+                        ", ".join(["{}:{:.6f}".format(k, v) for k, v in self._best_metrics.items()])))
 
                 if epoch % self._global_conf["save_epoch_iter"] == 0:
                     file_name = "iter_epoch_{}".format(epoch)
