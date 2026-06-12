@@ -79,6 +79,12 @@ python train.py -c config/train/det.yml
 
 骨干网络可选：`resnet34`（默认）、`resnet18`、`det_mobilenet_v3`
 
+如需从上次中断恢复：
+
+```bash
+python train.py -c config/train/det.yml --resume
+```
+
 ### 2. 文本识别模型训练（CRNN）
 
 ```bash
@@ -86,6 +92,12 @@ python train.py -c config/train/rec.yml
 ```
 
 骨干网络可选：`rec_mobilenet_v3`（默认）、`rec_resnet18`、`rec_resnet34`
+
+如需从上次中断恢复：
+
+```bash
+python train.py -c config/train/rec.yml --resume
+```
 
 ### 3. 文本检测推理
 
@@ -108,6 +120,24 @@ python lite_ocr.py -c config/lite_ocr.yml
 ```
 
 依次执行文本检测 → 仿射变换裁剪 → 文本识别，结果保存为可视化图像 + result.txt。
+
+### 6. 断点续训
+
+训练过程中每轮 epoch 结束自动保存 checkpoint 至 `save_pth_dir` 目录：
+
+| checkpoint | 说明 |
+|---|---|
+| `latest.pth` | 每 epoch 自动更新，用于恢复训练 |
+| `iter_epoch_N.pth` | 每隔 `save_epoch_iter` 轮定期保存 |
+| `best_xxx.pth` | 验证集指标最优时保存 |
+
+**中断恢复**：训练中按 `Ctrl+C` 会触发优雅退出，自动保存 `latest.pth`。下次启动时添加 `--resume` 即可从上次中断的 epoch 继续训练（包括模型权重、优化器状态、学习率调度器、global_step 等完整恢复）：
+
+```bash
+python train.py -c config/train/det.yml --resume
+```
+
+> `--resume` 等价于在配置中将 `init_pth_path` 指向 `latest.pth`，只是无需手动修改配置文件。
 
 ### ONNX 导出
 
