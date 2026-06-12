@@ -72,7 +72,6 @@ class Trainer(object):
         self._global_conf = self._conf["global"]
         self._best_indicator = 0
         self._indicator_name = "best_{}".format(self._conf["metrics"]["main_indicator"])
-        self._init_pth_model()
         if torch.cuda.is_available() and torch.cuda.device_count() > 1:
             # rank 标记主机或从机，设置为0表示主机
             # world_size标记使用几个主机，设为1表示1个
@@ -91,6 +90,7 @@ class Trainer(object):
         self._criterion = build_loss(self._conf["loss"])
         self._metrics = build_metric(self._conf["metrics"])
         self._post_process = build_post_process(self._conf["post_process"])
+        self._init_pth_model()
 
         self._start_epoch = 1 if self._last_epoch == -1 else self._last_epoch + 1
 
@@ -118,58 +118,63 @@ class Trainer(object):
         self._model.train()
         self._logger.info(f"开始训练{self._global_conf['yml_type']}模型.....")
         time.sleep(1)
-        for epoch in range(self._start_epoch, self._global_conf["epochs"] + 1):
-            log_start_time = time.time()
-            train_loader = self._get_epoch_data()
-            for idx, batch in enumerate(train_loader):
-                for key, val in batch.items():
-                    if not torch.is_tensor(val):
-                        continue
-                    batch[key] = val.to(self._device)
+        try:
+            for epoch in range(self._start_epoch, self._global_conf["epochs"] + 1):
+                log_start_time = time.time()
+                train_loader = self._get_epoch_data()
+                for idx, batch in enumerate(train_loader):
+                    for key, val in batch.items():
+                        if not torch.is_tensor(val):
+                            continue
+                        batch[key] = val.to(self._device)
 
-                self._global_step += 1
-                lr = self._optimizer.param_groups[0]["lr"]
-                preds = self._model(batch["image"])
-                loss_dict = self._criterion(preds, batch)
-                self._optimizer.zero_grad()
-                loss_dict["loss"].backward()
-                self._optimizer.step()
-                self._schedule.step()
+                    self._global_step += 1
+                    lr = self._optimizer.param_groups[0]["lr"]
+                    preds = self._model(batch["image"])
+                    loss_dict = self._criterion(preds, batch)
+                    self._optimizer.zero_grad()
+                    loss_dict["loss"].backward()
+                    self._optimizer.step()
+                    self._schedule.step()
 
-                indicator_str = ""
-                for key, val in loss_dict.items():
-                    indicator_str = '{}: {:.4f},'.format(key, val.item())
+                    indicator_str = ""
+                    for key, val in loss_dict.items():
+                        indicator_str = '{}: {:.4f},'.format(key, val.item())
 
-                if self._global_conf["yml_type"] == "REC":
-                    post_result = self._post_process(preds, batch)
-                    metrics = self._metrics(post_result)
-                    indicator_str += 'acc: {:.4f}, norm_edit_dis: {:.4f},'.format(metrics["acc"],
-                                                                                  metrics["norm_edit_dis"])
+                    if self._global_conf["yml_type"] == "REC":
+                        post_result = self._post_process(preds, batch)
+                        metrics = self._metrics(post_result)
+                        indicator_str += 'acc: {:.4f}, norm_edit_dis: {:.4f},'.format(metrics["acc"],
+                                                                                      metrics["norm_edit_dis"])
 
-                if self._global_step % self._global_conf["log_iter"] == 0:
-                    batch_time = time.time() - log_start_time
-                    info_txt = "【{}/{}】,【{}/{}】, global_step: {}, lr:{:.6}, {} speed: {:.1f} samples/sec"
-                    info_txt = info_txt.format(
-                        epoch, self._global_conf["epochs"], idx + 1, self._steps_per_epoch, self._global_step, lr,
-                        indicator_str, self._global_conf["log_iter"] * preds.size(0) / batch_time,
-                    )
-                    self._logger.info(info_txt)
-                    log_start_time = time.time()
+                    if self._global_step % self._global_conf["log_iter"] == 0:
+                        batch_time = time.time() - log_start_time
+                        info_txt = "【{}/{}】,【{}/{}】, global_step: {}, lr:{:.6}, {} speed: {:.1f} samples/sec"
+                        info_txt = info_txt.format(
+                            epoch, self._global_conf["epochs"], idx + 1, self._steps_per_epoch, self._global_step, lr,
+                            indicator_str, self._global_conf["log_iter"] * preds.size(0) / batch_time,
+                        )
+                        self._logger.info(info_txt)
+                        log_start_time = time.time()
 
-            if epoch % self._global_conf["eval_epoch"] == 0:
-                cur_metrics = self._eval()
-                self._logger.info(
-                    "cur metrics: {}".format(", ".join(["{}:{}".format(k, v) for k, v in cur_metrics.items()])))
-                if cur_metrics[self._conf["metrics"]["main_indicator"]] > self._best_indicator:
-                    self._best_epoch = epoch
-                    self._best_indicator = cur_metrics[self._conf["metrics"]["main_indicator"]]
-                    self._save_pth_model(self._indicator_name, epoch, self._best_epoch, self._best_indicator)
+                if epoch % self._global_conf["eval_epoch"] == 0:
+                    cur_metrics = self._eval()
+                    self._logger.info(
+                        "cur metrics: {}".format(", ".join(["{}:{}".format(k, v) for k, v in cur_metrics.items()])))
+                    if cur_metrics[self._conf["metrics"]["main_indicator"]] > self._best_indicator:
+                        self._best_epoch = epoch
+                        self._best_indicator = cur_metrics[self._conf["metrics"]["main_indicator"]]
+                        self._save_pth_model(self._indicator_name, epoch, self._best_epoch, self._best_indicator)
 
-            if epoch % self._global_conf["save_epoch_iter"] == 0:
-                file_name = "iter_epoch_{}".format(epoch)
-                self._save_pth_model(file_name, epoch, self._best_epoch, self._best_indicator)
+                if epoch % self._global_conf["save_epoch_iter"] == 0:
+                    file_name = "iter_epoch_{}".format(epoch)
+                    self._save_pth_model(file_name, epoch, self._best_epoch, self._best_indicator)
 
+                self._save_pth_model("latest", epoch, self._best_epoch, self._best_indicator)
+        except KeyboardInterrupt:
+            self._logger.info("\n检测到中断信号，正在保存 checkpoint ...")
             self._save_pth_model("latest", epoch, self._best_epoch, self._best_indicator)
+            self._logger.info("checkpoint 已保存至 latest.pth，下次使用 --resume 继续训练")
 
     def _eval(self):
         self._model.eval()
@@ -239,9 +244,13 @@ class Trainer(object):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", default="./config/train/det.yml", help="配置文件路径")
-    det_conf_path = parser.parse_args().config
+    parser.add_argument("--resume", action="store_true", help="从 latest checkpoint 恢复训练")
+    args = parser.parse_args()
+    det_conf_path = args.config
 
     cus_params = ReadConfig(det_conf_path).base_conf
+    if args.resume:
+        cus_params["global"]["init_pth_path"] = os.path.join(cus_params["global"]["save_pth_dir"], "latest.pth")
     cus_logger = get_logger(log_path=cus_params["global"]["save_pth_dir"])
     cus_logger.info("相关自定义参数:\n{}".format(json.dumps(cus_params, indent=2, ensure_ascii=False)))
     time.sleep(1)
