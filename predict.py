@@ -55,22 +55,30 @@ class Predictor(object):
         if not os.path.exists(self._conf["train_model_path"]):
             raise Exception("model_det {} not exists".format(self._conf["train_model_path"]))
 
-        ckpt = torch.load(self._conf["train_model_path"], map_location=torch.device('cpu'))["state_dict"]
-        self._model.load_state_dict(ckpt)
+        ckpt = torch.load(self._conf["train_model_path"], map_location=torch.device('cpu'))
+        state_dict = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
+        # 移除 DistributedDataParallel 产生的 "module." 前缀
+        if any(k.startswith("module.") for k in state_dict.keys()):
+            state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        self._model.load_state_dict(state_dict, strict=True)
         self._model.eval()
 
         if self._conf["yml_type"] == "DET":
-            x = torch.randn(1, 3, 224, 224, requires_grad=True)
+            x = torch.randn(1, 3, 224, 224, requires_grad=False)
             dynamic_axes = {
                 "input": {0: "batch_size", 2: "height", 3: "width"},
-                "output": {0: "batch_size"}
+                "output": {0: "batch_size", 2: "height", 3: "width"}
             }
         else:
-            x = torch.randn(1, 3, 32, 320, requires_grad=True)
+            x = torch.randn(1, 3, 32, 320, requires_grad=False)
             dynamic_axes = {
                 "input": {0: "batch_size", 3: "width"},
-                "output": {0: "batch_size"}
+                "output": {0: "time_steps", 1: "batch_size"}
             }
+
+        with torch.no_grad():
+            out = self._model(x)
+        print(f"[ONNX导出] 输入 shape: {tuple(x.shape)} → 输出 shape: {tuple(out.shape)}")
 
         torch.onnx.export(
             model=self._model,
@@ -78,14 +86,15 @@ class Predictor(object):
             f=self._conf["infer_model_path"],
             export_params=True,
             opset_version=11,
-            do_constant_folding=True,  # 是否执行常量折叠优化
-            input_names=["input"],  # 输入名
-            output_names=["output"],  # 输出名
+            do_constant_folding=True,
+            input_names=["input"],
+            output_names=["output"],
             dynamic_axes=dynamic_axes
         )
         try:
             onnx_model = onnx.load(self._conf["infer_model_path"])
             onnx.checker.check_model(onnx_model)
+            print(f"[ONNX导出] ✅ 校验通过: {self._conf['infer_model_path']}")
         except Exception as e:
             raise e
         return rt.InferenceSession(self._conf["infer_model_path"])
@@ -116,7 +125,11 @@ class Predictor(object):
             raise
         try:
             checkpoint = torch.load(self._conf["train_model_path"], map_location="cpu")
-            self._model.load_state_dict(checkpoint["state_dict"], strict=False)
+            state_dict = checkpoint["state_dict"] if "state_dict" in checkpoint else checkpoint
+            # 移除 DistributedDataParallel 产生的 "module." 前缀
+            if any(k.startswith("module.") for k in state_dict.keys()):
+                state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+            self._model.load_state_dict(state_dict, strict=True)
         except Exception:
             print("model_det init failed")
             raise
@@ -142,10 +155,10 @@ class Predictor(object):
                 out = self.sess.run(["output"], {"input": data["image"]})[0]
                 preds = torch.from_numpy(out)
             else:
-                images = torch.from_numpy(data["image"])
+                images = torch.from_numpy(data["image"]).float()
                 preds = self._model(images)
 
-            print("image: {} \texpend time: {:.4f}".format(image_path, time.time() - start_time))
+            print("image: {} \texpend time: {:.4f}s".format(image_path, time.time() - start_time))
             post_result = self._post_process(preds, data)
             dt_boxes_json = dict()
             dt_boxes_json["file_name"] = image_path

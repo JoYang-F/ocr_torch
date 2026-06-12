@@ -190,13 +190,18 @@ def load_checkpoint(model: torch.nn.Module, pth_path: str, device: str = "cpu"):
     if any(k.startswith("module.") for k in state_dict.keys()):
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    missing, unexpected = model.load_state_dict(state_dict, strict=True)
     if missing:
-        print(f"[WARN] 缺失的键 ({len(missing)}): {missing[:5]}...")
+        raise RuntimeError(
+            f"模型缺失 {len(missing)} 个权重键，可能是 backbone/架构参数与训练时不一致。\n"
+            f"缺失键 (前10个): {missing[:10]}"
+        )
     if unexpected:
-        print(f"[WARN] 多余的键 ({len(unexpected)}): {unexpected[:5]}...")
-
-    print(f"[INFO] 权重加载完成")
+        raise RuntimeError(
+            f"checkpoint 中存在 {len(unexpected)} 个多余键，可能是 backbone/架构参数与训练时不一致。\n"
+            f"多余键 (前10个): {unexpected[:10]}"
+        )
+    print(f"[INFO] 权重加载完成 (strict 校验通过)")
     return model
 
 
